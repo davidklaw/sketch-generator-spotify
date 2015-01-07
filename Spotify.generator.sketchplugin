@@ -1,0 +1,142 @@
+// sketch.scriptPath is an absolute path from ~ to the parent directory of the .sketchplugin
+var pluginPath = sketch.scriptPath.substring(0, sketch.scriptPath.lastIndexOf('/'));
+
+var baseUrl = 'https://api.spotify.com/v1'
+var el = getArray();
+
+if (el != null) {
+  var alert = createAlertBase('spotify');
+
+  alert.setMessageText("Options");
+  alert.setInformativeText("Customize the layers to map to.");
+
+  var responseCode = alert.runModal();
+
+  handleAlertResponse(alert, responseCode, el);
+}
+
+function handleAlertResponse(alert, responseCode, el) {
+  // The OK button will return a code of 1000
+  // Cancel is 1001.
+  // The codes are odd. They are based off the button's position in the view.
+  // They are explain in more detail in the NSAlert docs
+  // https://developer.apple.com/library/mac/documentation/cocoa/reference/applicationkit/classes/NSAlert_Class/Reference/Reference.html#//apple_ref/doc/constant_group/Button_Return_Values
+  // There's no anchor to it, but search for "Button Return Values" in the page
+  if (responseCode == "1000") {
+
+    var opts = {
+      query: valAtIndex(alert, 1),
+    }
+
+    var query = opts.query.replace(' ', '+');
+
+    var url = baseUrl + '/search?q=' + query + '&type=track';
+
+    sketch.doc.showMessage('Retrieving random tracks from Spotify...');
+
+    createAndPlaceContent(url, el);
+  }
+}
+
+// Creates a new bitmap image and adds it to the Layer group
+function addImgToCanvas (el, img, layerName) {
+  var imageCollection = el.documentData().images();
+  var imageData = [imageCollection addImage:img convertColourspace:false]
+  var newImage = [[MSBitmapLayer alloc] initWithImage:imageData parentFrame:el.frame() name:layerName];
+  el.addLayers([newImage]);
+  return newImage;
+}
+
+function createAndPlaceContent(url, el) {
+  var res = get(url);
+  var json = JSON.parse(NSString.alloc().initWithData_encoding(res, NSUTF8StringEncoding));
+  
+  if (json) {
+    var tracks = json.tracks.items;
+    var num_of_tracks = el.count();
+
+    for (var i=0; i < num_of_tracks; i++) {
+      var data = tracks[i];
+
+      layer_group = el[0];
+        
+      for (var j=0; j < layer_group.layers().count(); j++) {
+        var current_layer = layer_group.layers().objectAtIndex(j);
+        var key = current_layer.name();
+
+        var string_value = byString(data, key);
+
+        if (string_value) {
+          if (current_layer.className() == 'MSTextLayer') {
+            [current_layer setStringValue: String(string_value)];
+          }
+          else if (current_layer.className() == 'MSShapeGroup') {
+            var res = get(string_value);
+            var img = NSImage.alloc().initWithData(res);
+            
+            addImgToCanvas(layer_group.parentGroup(), img, key);
+
+            //current_layer.style().fills().firstObject().setFillType(4);
+            //current_layer.style().fills().firstObject().setPatternImage( newImage );
+            //current_layer.style().fills().firstObject().setPatternFillType(1);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Creates an alert using the CocoaScript COSAlertWindow class
+function createAlertBase(service) {
+  var alert = COSAlertWindow.new();
+
+  var icon = NSImage.alloc().initByReferencingFile(pluginPath + '/lib/' + service + '.icns');
+  alert.setIcon(icon);
+
+  alert.addTextLabelWithValue("Search");
+  alert.addTextFieldWithValue("Search");
+
+  alert.addButtonWithTitle('OK');
+  alert.addButtonWithTitle('Cancel');
+
+  return alert;
+}
+
+function getArray() {
+  var app = NSApplication.sharedApplication();
+  var el = null;
+  var s = sketch.selection;
+
+  if (s.count() == 0) {
+    app.displayDialog_withTitle("You'll need to select a group or you can select nothing and we'll add the image to the current page.", "Invalid Selection");
+  } else {
+    return s;
+  }
+}
+
+// A quick way to get the value of text fields in the alerts
+function valAtIndex (view, index) {
+  return view.viewAtIndex(index).stringValue()
+}
+
+function byString(o, s) {
+    s = s.replace(/\[(\w+)\]/g, '.$1'); // convert indexes to properties
+    s = s.replace(/^\./, '');           // strip a leading dot
+    var a = s.split('.');
+    while (a.length) {
+        var n = a.shift();
+        if (n in o) {
+            o = o[n];
+        } else {
+            return;
+        }
+    }
+    return o;
+}
+
+// Make an HTTP GET Request to url.
+function get(url) {
+  var request = NSURLRequest.requestWithURL(NSURL.URLWithString(url));
+  var response = NSURLConnection.sendSynchronousRequest_returningResponse_error(request, null, null);
+  return response;
+}

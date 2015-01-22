@@ -39,7 +39,7 @@ function handleAlertResponse(alert, responseCode, el) {
 }
 
 // Creates a new bitmap image and adds it to the Layer group
-function addImgToCanvas (el, img, layerName) {
+function addImgToCanvas(el, img, layerName) {
   var imageCollection = el.documentData().images();
   var imageData = [imageCollection addImage:img convertColourspace:false]
   var newImage = [[MSBitmapLayer alloc] initWithImage:imageData parentFrame:el.frame() name:layerName];
@@ -55,33 +55,63 @@ function createAndPlaceContent(url, el) {
     var tracks = json.tracks.items;
     var num_of_tracks = el.count();
 
-    for (var i=0; i < num_of_tracks; i++) {
-      var data = tracks[i];
+    log("Applying data to " + num_of_tracks + " items.")
 
-      layer_group = el[0];
+    for (var i=0; i < num_of_tracks; i++) {
+      var track_data = tracks[i];
+
+      layer_group = el[i];
         
       for (var j=0; j < layer_group.layers().count(); j++) {
         var current_layer = layer_group.layers().objectAtIndex(j);
         var key = current_layer.name();
 
-        var string_value = byString(data, key);
+        var string_value = byString(track_data, key);
 
         if (string_value) {
           if (current_layer.className() == 'MSTextLayer') {
             [current_layer setStringValue: String(string_value)];
+            [current_layer adjustFrameToFit];
           }
           else if (current_layer.className() == 'MSShapeGroup') {
             var res = get(string_value);
             var img = NSImage.alloc().initWithData(res);
             
-            addImgToCanvas(layer_group.parentGroup(), img, key);
+            // If the layer we're working with is within a smart object
+            // then add this image to the document outside of that.
+            // Otherwise, set it as a pattern.
 
-            //current_layer.style().fills().firstObject().setFillType(4);
-            //current_layer.style().fills().firstObject().setPatternImage( newImage );
-            //current_layer.style().fills().firstObject().setPatternFillType(1);
+            if (doc.documentData().layerSymbols().isLayerContainedByAnySymbol(current_layer))) {
+              addImgToCanvas(current_layer, img, "cover");
+            } else {
+              current_layer.style().fills().firstObject().setFillType(4);
+              current_layer.style().fills().firstObject().setPatternImage(img);
+              current_layer.style().fills().firstObject().setPatternFillType(1);
+            }
           }
         }
       }
+    }
+  }
+}
+
+function inSymbol(layer) {
+  if (layer.parentGroup() == nil) {
+    log("Done")
+    return false;
+  }
+  
+  parentGroup = layer.parentGroup();
+
+  symbols = doc.documentData().layerSymbols()
+  
+  log("Checking parent against " + symbols + " symbols.")
+  
+  for (var i=0; i < symbols.length; i++) {
+    log("Checking parent for symbol match")
+    symbol = symbols[i];
+    if (symbol == parentGroup) {
+      return true;
     }
   }
 }
